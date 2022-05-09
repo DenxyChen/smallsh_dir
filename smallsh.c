@@ -33,6 +33,7 @@
 // }
 
 int parse_command(pid_t pid);
+void get_input(pid_t pid, char *line);
 
 /* ============================================================
 main() runs a loop that continuously gets a command from the user
@@ -61,43 +62,11 @@ Parameters: pid -> pid_t
 Returns: 1 (to continue main loop), 0 (to exit the program)
 ============================================================ */
 int parse_command(pid_t pid) {
-    char *pidstr;
-    {
-        int n = snprintf(NULL, 0, "%d", pid);
-        pidstr = malloc((n + 1) * sizeof *pidstr);
-        sprintf(pidstr, "%d", pid);
-    }
 
-    char line[MAX_LENGTH];
-    int index = 0;
-    int current, expansion_flag = 0;
+    char line[MAX_LENGTH] = {0};
+    get_input(pid, line);
 
-    do{
-        current = getchar();
 
-        // If the current character is $ 
-        if (current == '$' && expansion_flag == 0) {
-            expansion_flag = 1;
-        }
-        else if (current == '$' && expansion_flag == 1) {
-            for (size_t i = 0; i < strlen(pidstr); i++) {
-                line[index] = pidstr[i];
-                index += 1;
-            }
-            expansion_flag = 0;
-        }
-        else{
-            if (expansion_flag == 1){
-                line[index] = '$';
-                index += 1;
-                expansion_flag = 0;
-            }
-            line[index] = current;
-            index += 1;
-        }
-    } while(index < MAX_LENGTH && current != '\n');
-
-    line[index - 1] = 0;
     printf("%s\n", line);
     fflush(stdout);
 
@@ -107,4 +76,52 @@ int parse_command(pid_t pid) {
     else{
         return 1;
     }
+}
+
+/* ============================================================
+get_input() reads in the line character by character. It replaces
+all instances of the expansion variable $$ with the PID.
+
+Parameters: pid -> pid_t
+Returns: input -> string
+============================================================ */
+void get_input(pid_t pid, char *line) {
+    char *pidstr;
+    {
+        int n = snprintf(NULL, 0, "%d", pid);
+        pidstr = malloc((n + 1) * sizeof *pidstr);
+        sprintf(pidstr, "%d", pid);
+    }
+
+    int index = 0;
+    int current, expansion_flag = 0;
+
+    do{
+        current = getchar();
+
+        if (current == '$' && expansion_flag == 0) {
+            expansion_flag = 1;
+        }
+        // If the current and previous char were both $, append pidstr
+        else if (current == '$' && expansion_flag == 1) {
+            for (size_t i = 0; i < strlen(pidstr); i++) {
+                line[index] = pidstr[i];
+                index += 1;
+            }
+            expansion_flag = 0;
+        }
+        else{
+            // If the previous char was $, but the current is not, append $ before the current
+            if (expansion_flag == 1){
+                line[index] = '$';
+                index += 1;
+                expansion_flag = 0;
+            }
+            // Otherwise append the current char
+            line[index] = current;
+            index += 1;
+        }
+    } while(index < MAX_LENGTH && current != '\n');
+
+    line[index - 1] = 0;
 }
