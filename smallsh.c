@@ -32,12 +32,35 @@
 //     printf("%s", buf);
 // }
 
-int parse_command();
+int parse_command(pid_t pid);
 
-/* Prompts the user, then run the command. */
+/* ============================================================
+main() runs a loop that continuously gets a command from the user
+while run_flag is true. When the user enters the "exit" command,
+run_flag is set to false and the program exits.
+============================================================ */
 int main() {
     int run_flag = 1;
     pid_t pid = getpid();
+    printf("pid is:    %d\n", pid);
+
+    while (run_flag == 1) {
+        printf(": ");
+        fflush(stdout);
+        run_flag = parse_command(pid);
+    }
+
+    return EXIT_SUCCESS;
+}
+
+/* ============================================================
+parse_command() calls get_input() to read in the line with the
+expansion variable accounted for. Then it executes the command.
+
+Parameters: pid -> pid_t
+Returns: 1 (to continue main loop), 0 (to exit the program)
+============================================================ */
+int parse_command(pid_t pid) {
     char *pidstr;
     {
         int n = snprintf(NULL, 0, "%d", pid);
@@ -45,30 +68,37 @@ int main() {
         sprintf(pidstr, "%d", pid);
     }
 
-    printf("pid is:    %d\n", pid);
-    printf("pidstr is: %s\n", pidstr);
-
-    while (run_flag == 1) {
-        printf(": ");
-        fflush(stdout);
-        run_flag = parse_command();
-    }
-
-    return EXIT_SUCCESS;
-}
-
-int parse_command() {
     char line[MAX_LENGTH];
-    int current, index = 0;
+    int index = 0;
+    int current, previous = 0;
 
     do{
         current = getchar();
-        line[index] = current;
-        index += 1;
+
+        if (current == '$' && previous == 0) {
+            previous = 1;
+        }
+        else if (current == '$' && previous == 1) {
+            for (size_t i = 0; i < strlen(pidstr); i++) {
+                line[index] = pidstr[i];
+                index += 1;
+            }
+            previous = 0;
+        }
+        else{
+            if (previous == 1){
+                line[index] = '$';
+                index += 1;
+                previous = 0;
+            }
+            line[index] = current;
+            index += 1;
+        }
     } while(index < MAX_LENGTH && current != '\n');
 
     line[index - 1] = 0;
-    printf("%s", line);
+    printf("%s\n", line);
+    fflush(stdout);
 
     if (strcmp(line, "exit") == 0) {
         return 0;
