@@ -67,24 +67,30 @@ int parse_command(pid_t pid) {
     char line[MAX_LENGTH] = {0};
     get_input(pid, line);
 
-    struct args *command = parse_args(line);
+    struct args *cmd = parse_args(line);
 
     // Ignore empty lines and lines that start with #
-    if ((command->argc == 0) | (line[0] == '#')){
+    if ((cmd->argc == 0) | (line[0] == '#')){
         printf("\n");
         fflush(stdout);
+        free(cmd);
         return 1;
     }
 
-    printf("%d: ", command->argc);
+    printf("%d - ", cmd->argc);
     fflush(stdout);
-    printf("%s\n", line);
+    for (int i = 0; i < cmd->argc; i++) {
+        printf("%s ", cmd->argv[i]);
+        fflush(stdout);
+    }
+    printf("\n");
     fflush(stdout);
 
-    if (strcmp(line, "exit") == 0) {
+    if (strcmp(cmd->argv[0], "exit") == 0) {
+        free(cmd);
         return 0;
     }
-    else if (strcmp(line, "cd") == 0) {
+    else if (strcmp(cmd->argv[0], "cd") == 0) {
         printf("HOME : %s\n", getenv("HOME"));
         return 1;
     }
