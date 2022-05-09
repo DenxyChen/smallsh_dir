@@ -22,15 +22,15 @@ struct args
     int background_flag;
 };
 
-int execute_command(pid_t pid);
+int run_command(pid_t pid);
 void get_input(pid_t pid, char *line);
 struct args* parse_args(char *line);
 void cd(char *path);
 
 /* ============================================================
-main() runs a loop that continuously calls execute_command() 
+main() runs a loop that continuously calls run_command() 
 to get a line of input from the user and executes it while
-run_flag is true. If the "exit" command is given, execute_command()
+run_flag is true. If the "exit" command is given, run_command()
 sets run_flag to false which breaks the loop and exits the program.
 ============================================================ */
 int main() {
@@ -42,14 +42,14 @@ int main() {
     while (run_flag == 1) {
         printf(": ");
         fflush(stdout);
-        run_flag = execute_command(pid);
+        run_flag = run_command(pid);
     }
 
     return EXIT_SUCCESS;
 }
 
 /* ============================================================
-execute_command() calls get_input() to read in the line with the
+run_command() calls get_input() to read in the line with the
 expansion variable accounted for. Then it calls parse_args() to 
 parse the raw input into the args struct defined at the top of 
 the file. Then it executes the command.
@@ -57,7 +57,7 @@ the file. Then it executes the command.
 Recieves: pid -> pid_t
 Returns: 1 (to continue main loop), 0 (to exit the program)
 ============================================================ */
-int execute_command(pid_t pid) {
+int run_command(pid_t pid) {
 
     char line[MAX_LENGTH] = {0};
     get_input(pid, line);
@@ -197,24 +197,23 @@ struct args* parse_args(char *line) {
     cmd->background_flag = 0;
     int redir_flag = 0;
 
+    // Parse line into an array of strings delineated by whitespace
     char *token = strtok(line_copy, TOK_DELIM);
     while (token != NULL) {
         // redir_flag == 1 indicates next token is the input file
-        if ((strcmp(token, "<") == 0) && (redir_flag == 0)) {
+        if ((strcmp(token, "<") == 0) && (redir_flag == 0) && (cmd->input_file == NULL)) {
             redir_flag = 1;
         }
         // redir_flag == 2 indicates next token is the output file
-        else if (strcmp(token, ">") == 0 && (redir_flag == 0)) {
+        else if (strcmp(token, ">") == 0 && (redir_flag == 0) && (cmd->output_file == NULL)) {
             redir_flag = 2;
         }
         else {
             if (redir_flag == 1) {
                 cmd->input_file = token;
-                printf("input file: %s\n", cmd->input_file);
             }
             else if (redir_flag == 2) {
                 cmd-> output_file = token;
-                printf("output file: %s\n", cmd->output_file);
             }
             redir_flag = 0;
         }
