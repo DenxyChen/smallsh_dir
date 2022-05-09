@@ -11,16 +11,13 @@
 
 #define MAX_LENGTH 2048
 #define MAX_ARG 512
-#define TOK_DELIM ' '
+#define TOK_DELIM " "
 
-// struct movie
-// {
-//     char *title;
-//     int year;
-//     char *languages;
-//     double rating;
-//     struct movie *next;
-// }; 
+struct args
+{
+    int argc;
+    char *argv[MAX_ARG];
+};
 
 // /* Get user input and tokenize the arguments. Store the input and output file names. */
 // void getInput(char* arguments, char* inputFile, char* outputFile, int* background) {
@@ -35,6 +32,8 @@
 
 int parse_command(pid_t pid);
 void get_input(pid_t pid, char *line);
+struct args* parse_args(char *line);
+void cd(char *path);
 
 /* ============================================================
 main() runs a loop that continuously gets a command from the user
@@ -45,6 +44,7 @@ int main() {
     int run_flag = 1;
     pid_t pid = getpid();
     printf("pid is:    %d\n", pid);
+    fflush(stdout);
 
     while (run_flag == 1) {
         printf(": ");
@@ -67,16 +67,26 @@ int parse_command(pid_t pid) {
     char line[MAX_LENGTH] = {0};
     get_input(pid, line);
 
+    struct args *command = parse_args(line);
+
     // Ignore empty lines and lines that start with #
-    if ((strlen(line) == 0) | (line[0] == '#')){
+    if ((command->argc == 0) | (line[0] == '#')){
+        printf("\n");
+        fflush(stdout);
         return 1;
     }
 
+    printf("%d: ", command->argc);
+    fflush(stdout);
     printf("%s\n", line);
     fflush(stdout);
 
     if (strcmp(line, "exit") == 0) {
         return 0;
+    }
+    else if (strcmp(line, "cd") == 0) {
+        printf("HOME : %s\n", getenv("HOME"));
+        return 1;
     }
     else{
         return 1;
@@ -132,4 +142,20 @@ void get_input(pid_t pid, char *line) {
 
     // Null-terminate string
     line[index - 1] = 0;
+}
+
+struct args* parse_args(char *line) {
+    struct args *cmd = malloc(sizeof(struct args));
+    char line_copy[MAX_LENGTH];
+    strcpy(line_copy, line);
+    cmd->argc = 0;
+
+    char *token = strtok(line_copy, TOK_DELIM);
+    while (token != NULL) {
+        cmd->argv[cmd->argc] = token;
+        cmd->argc += 1;
+        token = strtok(NULL, TOK_DELIM);
+    }
+
+    return cmd;
 }
