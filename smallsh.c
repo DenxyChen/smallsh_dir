@@ -30,7 +30,7 @@ struct args
 //     printf("%s", buf);
 // }
 
-int parse_command(pid_t pid);
+int execute_command(pid_t pid);
 void get_input(pid_t pid, char *line);
 struct args* parse_args(char *line);
 void cd(char *path);
@@ -49,20 +49,22 @@ int main() {
     while (run_flag == 1) {
         printf(": ");
         fflush(stdout);
-        run_flag = parse_command(pid);
+        run_flag = execute_command(pid);
     }
 
     return EXIT_SUCCESS;
 }
 
 /* ============================================================
-parse_command() calls get_input() to read in the line with the
-expansion variable accounted for. Then it executes the command.
+execute_command() calls get_input() to read in the line with the
+expansion variable accounted for. Then it calls parse_args() to 
+parse the raw input into the args struct defined at the top of 
+the file. Then it executes the command.
 
 Recieves: pid -> pid_t
 Returns: 1 (to continue main loop), 0 (to exit the program)
 ============================================================ */
-int parse_command(pid_t pid) {
+int execute_command(pid_t pid) {
 
     char line[MAX_LENGTH] = {0};
     get_input(pid, line);
@@ -86,17 +88,45 @@ int parse_command(pid_t pid) {
     printf("\n");
     fflush(stdout);
 
+    // exit command with error handling if arguments are provided
     if (strcmp(cmd->argv[0], "exit") == 0) {
-        free(cmd);
-        return 0;
+        if (cmd->argc == 1) {
+            free(cmd);
+            return 0;
+        }
+        else {
+            fprintf(stderr, "exit: too many arguments\n");
+            fflush(stderr);
+        }
     }
+
+    // cd command which changes dir to HOME if no arguments are provided
     else if (strcmp(cmd->argv[0], "cd") == 0) {
-        printf("HOME : %s\n", getenv("HOME"));
-        return 1;
+        if (cmd->argc == 1) {
+            if (chdir(getenv("HOME")) == 0) {
+                printf("cd: %s\n", getenv("HOME"));
+                fflush(stdout);
+            }
+        }
+        // Changes dir to the path passed as an argument if one is provided
+        else if (cmd->argc == 2) {
+            if (chdir(cmd->argv[1]) == 0) {
+                printf("cd: %s\n", cmd->argv[1]);
+                fflush(stdout);
+            }
+            else {
+                fprintf(stderr, "cd: %s: no such directory\n", cmd->argv[1]);
+                fflush(stderr);
+            }
+        }
+        else {
+            fprintf(stderr, "cd: too many arguments\n");
+            fflush(stderr);
+        }
     }
-    else{
-        return 1;
-    }
+
+    free(cmd);
+    return 1;
 }
 
 /* ============================================================
