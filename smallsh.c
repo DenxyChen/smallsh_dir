@@ -13,6 +13,8 @@
 #define MAX_ARG 512
 #define DELIM " "
 
+int exit_status = 0;
+
 struct args
 {
     int argc;
@@ -63,8 +65,6 @@ int run_command(pid_t pid) {
     get_input(pid, line);
 
     struct args *cmd = parse_args(line);
-
-    int exit_status = 0;
 
     // Ignore empty lines and lines that start with #
     if ((cmd->argc == 0) | (line[0] == '#')){
