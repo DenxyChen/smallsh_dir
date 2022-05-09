@@ -11,6 +11,7 @@
 
 #define MAX_LENGTH 2048
 #define MAX_ARG 512
+#define TOK_DELIM ' '
 
 // struct movie
 // {
@@ -58,7 +59,7 @@ int main() {
 parse_command() calls get_input() to read in the line with the
 expansion variable accounted for. Then it executes the command.
 
-Parameters: pid -> pid_t
+Recieves: pid -> pid_t
 Returns: 1 (to continue main loop), 0 (to exit the program)
 ============================================================ */
 int parse_command(pid_t pid) {
@@ -66,6 +67,10 @@ int parse_command(pid_t pid) {
     char line[MAX_LENGTH] = {0};
     get_input(pid, line);
 
+    // Ignore empty lines and lines that start with #
+    if ((strlen(line) == 0) | (line[0] == '#')){
+        return 1;
+    }
 
     printf("%s\n", line);
     fflush(stdout);
@@ -82,10 +87,11 @@ int parse_command(pid_t pid) {
 get_input() reads in the line character by character. It replaces
 all instances of the expansion variable $$ with the PID.
 
-Parameters: pid -> pid_t
+Recieves: pid -> pid_t
 Returns: input -> string
 ============================================================ */
 void get_input(pid_t pid, char *line) {
+    // Parse PID to string from Ed Discussion post
     char *pidstr;
     {
         int n = snprintf(NULL, 0, "%d", pid);
@@ -96,6 +102,7 @@ void get_input(pid_t pid, char *line) {
     int index = 0;
     int current, expansion_flag = 0;
 
+    // Read stdin until the max char length is reached or a newline is encountered
     do{
         current = getchar();
 
@@ -123,5 +130,6 @@ void get_input(pid_t pid, char *line) {
         }
     } while(index < MAX_LENGTH && current != '\n');
 
+    // Null-terminate string
     line[index - 1] = 0;
 }
