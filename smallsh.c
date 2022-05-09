@@ -1,7 +1,7 @@
 //  Name: Xiao Yu Chen
 //  Class: CS344 Spring 2022
 //  Date: 05/09/2022
-//  Description: An implementation of a shell program in C.
+//  Description: An implementation of a shell program (command-line interface) in C.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,18 +17,10 @@ struct args
 {
     int argc;
     char *argv[MAX_ARG];
+    char *input_file;
+    char *output_file;
+    int background_flag;
 };
-
-// /* Get user input and tokenize the arguments. Store the input and output file names. */
-// void getInput(char* arguments, char* inputFile, char* outputFile, int* background) {
-    
-//     char *buf;
-//     size_t buflen;
-
-//     printf(": ");
-//     getline(&buf, &buflen, stdin);
-//     printf("%s", buf);
-// }
 
 int execute_command(pid_t pid);
 void get_input(pid_t pid, char *line);
@@ -36,9 +28,10 @@ struct args* parse_args(char *line);
 void cd(char *path);
 
 /* ============================================================
-main() runs a loop that continuously gets a command from the user
-while run_flag is true. When the user enters the "exit" command,
-run_flag is set to false and the program exits.
+main() runs a loop that continuously calls execute_command() 
+to get a line of input from the user and executes it while
+run_flag is true. If the "exit" command is given, execute_command()
+sets run_flag to false which breaks the loop and exits the program.
 ============================================================ */
 int main() {
     int run_flag = 1;
@@ -88,8 +81,9 @@ int execute_command(pid_t pid) {
     printf("\n");
     fflush(stdout);
 
-    // exit command with error handling if arguments are provided
+    // exit command
     if (strcmp(cmd->argv[0], "exit") == 0) {
+        // Exits main loop if no arguments are provided
         if (cmd->argc == 1) {
             free(cmd);
             return 0;
@@ -100,8 +94,9 @@ int execute_command(pid_t pid) {
         }
     }
 
-    // cd command which changes dir to HOME if no arguments are provided
+    // cd command
     else if (strcmp(cmd->argv[0], "cd") == 0) {
+        // Changes wprking dir to the HOME environment variable if no arguments are provided
         if (cmd->argc == 1) {
             if (chdir(getenv("HOME")) == 0) {
                 char cwd[MAX_LENGTH];
@@ -110,7 +105,7 @@ int execute_command(pid_t pid) {
                 fflush(stdout);
             }
         }
-        // Changes dir to the path passed as an argument if one is provided
+        // Changes working dir to the relative path passed as an argument if one is provided
         else if (cmd->argc == 2) {
             if (chdir(cmd->argv[1]) == 0) {
                 char cwd[MAX_LENGTH];
@@ -137,8 +132,9 @@ int execute_command(pid_t pid) {
 get_input() reads in the line character by character. It replaces
 all instances of the expansion variable $$ with the PID.
 
-Recieves: pid -> pid_t
-Returns: input -> string
+Recieves: pid -> pid_t, line -> char*
+Returns: none
+Postconditions: line references input string
 ============================================================ */
 void get_input(pid_t pid, char *line) {
     // Parse PID to string from Ed Discussion post
@@ -150,17 +146,17 @@ void get_input(pid_t pid, char *line) {
     }
 
     int index = 0;
-    int current, expansion_flag = 0;
+    int current_char, expansion_flag = 0;
 
     // Read stdin until the max char length is reached or a newline is encountered
     do{
-        current = getchar();
+        current_char = getchar();
 
-        if (current == '$' && expansion_flag == 0) {
+        if (current_char == '$' && expansion_flag == 0) {
             expansion_flag = 1;
         }
         // If the current and previous char were both $, append pidstr
-        else if (current == '$' && expansion_flag == 1) {
+        else if (current_char == '$' && expansion_flag == 1) {
             for (size_t i = 0; i < strlen(pidstr); i++) {
                 line[index] = pidstr[i];
                 index += 1;
@@ -175,26 +171,62 @@ void get_input(pid_t pid, char *line) {
                 expansion_flag = 0;
             }
             // Otherwise append the current char
-            line[index] = current;
+            line[index] = current_char;
             index += 1;
         }
-    } while(index < MAX_LENGTH && current != '\n');
+    } while(index < MAX_LENGTH && current_char != '\n');
 
     // Null-terminate string
     line[index - 1] = 0;
 }
 
+/* ============================================================
+parse_args() takes the user input and parses tokens delineated
+by whitespaces into an arg struct defined at the top and returns
+the struct.
+
+Recieves: line -> char*
+Returns: struct args*
+============================================================ */
 struct args* parse_args(char *line) {
-    struct args *cmd = malloc(sizeof(struct args));
     char line_copy[MAX_LENGTH];
     strcpy(line_copy, line);
+
+    struct args *cmd = malloc(sizeof(struct args));
     cmd->argc = 0;
+    cmd->background_flag = 0;
+    int redir_flag = 0;
 
     char *token = strtok(line_copy, TOK_DELIM);
     while (token != NULL) {
+        // redir_flag == 1 indicates next token is the input file
+        if ((strcmp(token, "<") == 0) && (redir_flag == 0)) {
+            redir_flag = 1;
+        }
+        // redir_flag == 2 indicates next token is the output file
+        else if (strcmp(token, ">") == 0 && (redir_flag == 0)) {
+            redir_flag = 2;
+        }
+        else {
+            if (redir_flag == 1) {
+                cmd->input_file = token;
+                printf("input file: %s\n", cmd->input_file);
+            }
+            else if (redir_flag == 2) {
+                cmd-> output_file = token;
+                printf("output file: %s\n", cmd->output_file);
+            }
+            redir_flag = 0;
+        }
+        
         cmd->argv[cmd->argc] = token;
         cmd->argc += 1;
         token = strtok(NULL, TOK_DELIM);
+    }
+
+    // Set background flag if the last arg is &
+    if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
+        cmd->background_flag = 1;
     }
 
     return cmd;
