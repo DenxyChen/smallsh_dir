@@ -1,7 +1,7 @@
 //  Name: Xiao Yu Chen
-//  Class: CS 344, WQ2022
-//  Date: 2/07/2022
-//  Description: An implementation of a shell in C that prompts for commands and runs them using the exec family of functions.
+//  Class: CS344 Spring 2022
+//  Date: 05/09/2022
+//  Description: An implementation of a shell program in C.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,14 +104,18 @@ int execute_command(pid_t pid) {
     else if (strcmp(cmd->argv[0], "cd") == 0) {
         if (cmd->argc == 1) {
             if (chdir(getenv("HOME")) == 0) {
-                printf("cd: %s\n", getenv("HOME"));
+                char cwd[MAX_LENGTH];
+                getcwd(cwd, sizeof(cwd));
+                printf("cd: %s\n", cwd);
                 fflush(stdout);
             }
         }
         // Changes dir to the path passed as an argument if one is provided
         else if (cmd->argc == 2) {
             if (chdir(cmd->argv[1]) == 0) {
-                printf("cd: %s\n", cmd->argv[1]);
+                char cwd[MAX_LENGTH];
+                getcwd(cwd, sizeof(cwd));
+                printf("cd: %s\n", cwd);
                 fflush(stdout);
             }
             else {
