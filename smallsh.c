@@ -70,26 +70,27 @@ int parse_command(pid_t pid) {
 
     char line[MAX_LENGTH];
     int index = 0;
-    int current, previous = 0;
+    int current, expansion_flag = 0;
 
     do{
         current = getchar();
 
-        if (current == '$' && previous == 0) {
-            previous = 1;
+        // If the current character is $ 
+        if (current == '$' && expansion_flag == 0) {
+            expansion_flag = 1;
         }
-        else if (current == '$' && previous == 1) {
+        else if (current == '$' && expansion_flag == 1) {
             for (size_t i = 0; i < strlen(pidstr); i++) {
                 line[index] = pidstr[i];
                 index += 1;
             }
-            previous = 0;
+            expansion_flag = 0;
         }
         else{
-            if (previous == 1){
+            if (expansion_flag == 1){
                 line[index] = '$';
                 index += 1;
-                previous = 0;
+                expansion_flag = 0;
             }
             line[index] = current;
             index += 1;
