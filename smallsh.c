@@ -11,7 +11,7 @@
 
 #define MAX_LENGTH 2048
 #define MAX_ARG 512
-#define TOK_DELIM " "
+#define DELIM " "
 
 struct args
 {
@@ -63,6 +63,8 @@ int run_command(pid_t pid) {
     get_input(pid, line);
 
     struct args *cmd = parse_args(line);
+
+    int exit_status = 0;
 
     // Ignore empty lines and lines that start with #
     if ((cmd->argc == 0) | (line[0] == '#')){
@@ -122,6 +124,10 @@ int run_command(pid_t pid) {
             fprintf(stderr, "cd: too many arguments\n");
             fflush(stderr);
         }
+    }
+
+    else if (strcmp(cmd->argv[0], "status") == 0) {
+        printf("exit value %d\n", exit_status);
     }
 
     free(cmd);
@@ -189,8 +195,8 @@ Recieves: line -> char*
 Returns: struct args*
 ============================================================ */
 struct args* parse_args(char *line) {
-    char line_copy[MAX_LENGTH];
-    strcpy(line_copy, line);
+    char line_cpy[MAX_LENGTH];
+    strcpy(line_cpy, line);
 
     struct args *cmd = malloc(sizeof(struct args));
     cmd->argc = 0;
@@ -198,7 +204,7 @@ struct args* parse_args(char *line) {
     int redir_flag = 0;
 
     // Parse line into an array of strings delineated by whitespace
-    char *token = strtok(line_copy, TOK_DELIM);
+    char *token = strtok(line_cpy, DELIM);
     while (token != NULL) {
         // redir_flag == 1 indicates next token is the input file
         if ((strcmp(token, "<") == 0) && (redir_flag == 0) && (cmd->input_file == NULL)) {
@@ -220,7 +226,7 @@ struct args* parse_args(char *line) {
         
         cmd->argv[cmd->argc] = token;
         cmd->argc += 1;
-        token = strtok(NULL, TOK_DELIM);
+        token = strtok(NULL, DELIM);
     }
 
     // Set background flag if the last arg is &
@@ -230,3 +236,4 @@ struct args* parse_args(char *line) {
 
     return cmd;
 }
+
