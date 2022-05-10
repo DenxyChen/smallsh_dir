@@ -73,7 +73,7 @@ int main() {
             if(background_processes[i] != -1) {
                 int result, status;
                 result = waitpid(background_processes[i], &status, WNOHANG);
-                if (result == 0) {
+                if (result != 0) {
                     if (WIFSIGNALED(status)) {
                         printf("background pid %d is done: terminated by signal %d\n", background_processes[i], WTERMSIG(status));
                         fflush(stdout);
@@ -308,7 +308,13 @@ int run_command(pid_t pid) {
             fflush(stderr);
             exit_status = 1;
             free(cmd);
-            exit(1);
+
+            if (cmd->background_flag == 0) {
+                exit(1);
+            }
+            else{
+                kill(this_pid, SIGTERM);
+            }
         }
 
         // Run if the calling process is the parent
