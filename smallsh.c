@@ -61,6 +61,8 @@ int main() {
     // ignore_action.sa_handler = SIG_IGN;
     // sigaction(SIGINT, &ignore_action, NULL);
 
+    printf("%d\n", pid);
+
     while (run_flag == 1) {
         printf(": ");
         fflush(stdout);
@@ -75,6 +77,13 @@ run_command() calls get_input() to read in the line with the
 expansion variable accounted for. Then it calls parse_args() to 
 parse the raw input into the args struct defined at the top of 
 the file. Then it executes the command.
+
+Note to grader: Initially implemented with parse_args() to handle
+tokenization of the user input, but I ran into issues with 
+parsing more than 10 arguments. It seems to work when integrated
+with this function so I moved all of the functionality over. I
+ran into more issues with create_child() and run_in_foreground()
+so unfortunately, those were implemented in this function as well.
 
 Recieves: pid -> pid_t
 Returns: 1 (to continue main loop), 0 (to exit the program)
@@ -123,9 +132,10 @@ int run_command(pid_t pid) {
         token = strtok(NULL, DELIM);
     }
 
-    // Set background flag if the last arg is &
+    // Set background flag and null the last arg if &
     if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
         cmd->background_flag = 1;
+        cmd->argv[cmd->argc - 1] = "\0";
     }
 
     // Ignore empty lines and lines that start with #
@@ -259,8 +269,12 @@ int run_command(pid_t pid) {
                 dup2(in_fd, STDOUT_FILENO);
             }
 
+            // Call exec() to run the given command with args
+            // Redirection operators < and > are set as NULL in argv
+            // exec() stops as soon as it encounters NULL
             execvp(cmd->argv[0], cmd->argv);
 
+            // Error code that is executed if exec() fails
             fprintf(stderr, "%s: %s\n", cmd->argv[0], strerror(errno));
             fflush(stderr);
             exit_status = 1;
@@ -272,6 +286,7 @@ int run_command(pid_t pid) {
         }
     }
 
+    // Free malloc'd struct, return 1 to continue loop
     free(cmd);
     return 1;
 }
