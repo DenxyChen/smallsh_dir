@@ -48,6 +48,13 @@ main() runs a loop that continuously calls run_command()
 to get a line of input from the user and executes it while
 run_flag is true. If the "exit" command is given, run_command()
 sets run_flag to false which breaks the loop and exits the program.
+
+Later added reaping of child processes before a new prompt.
+I call waitpid() on every background process pid in the array
+and print the exit status or signal code of any process terminated
+since the last main loop. Note that status is not updated while 
+waiting for a command, so the user must enter a command before
+they see the latest status of completed background processes.
 ============================================================ */
 int main() {
     int run_flag = 1;
@@ -120,6 +127,7 @@ int run_command(pid_t pid) {
     // char line_cpy[MAX_LENGTH];
     // strcpy(line_cpy, line);
 
+    // Initialize args struct to 0 or NULL
     struct args *cmd = malloc(sizeof(struct args));
     cmd->argc = 0;
     memset(cmd->argv, 0, sizeof(cmd->argv));
@@ -156,7 +164,7 @@ int run_command(pid_t pid) {
         token = strtok(NULL, DELIM);
     }
 
-    // Set background flag and null the last arg if &
+    // Set background flag and NULL the last arg if &
     if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
         cmd->background_flag = 1;
         cmd->argv[cmd->argc - 1] = NULL;
@@ -272,6 +280,7 @@ int run_command(pid_t pid) {
                     free(cmd);
                     return 1;
                 }
+                // Redirect input post-fork using dup2
                 dup2(in_fd, STDIN_FILENO);
             }
             // Handle input redirection if background and unspecified
@@ -294,6 +303,8 @@ int run_command(pid_t pid) {
                 dup2(out_fd, STDOUT_FILENO);
             }
             // Handle input redirection if background and unspecified
+            // If /dev/null was already open from input redirection
+            // Use it for output as well isntead of opening again
             else if (cmd->background_flag == 1 && (dev_null_open_flag != 1)) {
                 out_fd = open("/dev/null", O_RDWR);
                 dev_null_open_flag = 1;
@@ -301,7 +312,7 @@ int run_command(pid_t pid) {
             }
 
             // Call exec() to run the given command with args
-            // Redirection operators < and > are set as NULL in argv
+            // Operators < and > and & are set as NULL in argv
             // exec() stops as soon as it encounters NULL
             execvp(cmd->argv[0], cmd->argv);
 
@@ -311,9 +322,11 @@ int run_command(pid_t pid) {
             exit_status = 1;
             free(cmd);
 
+            // Ensure failed foreground child doesn't loop back to main
             if (cmd->background_flag == 0) {
                 exit(1);
             }
+            // Ensure failed background child doesn't loop back to main
             else{
                 kill(this_pid, SIGTERM);
             }
@@ -325,6 +338,7 @@ int run_command(pid_t pid) {
             if (cmd->background_flag == 0) {
                 int status;
                 waitpid(this_pid, &status, 0);
+                // Set exit_status to last foreground signal or exit status
                 if (WIFSIGNALED(status)) {
                     exit_status = WTERMSIG(status);
                     printf("foreground: terminated by signal %d", exit_status);
@@ -337,7 +351,7 @@ int run_command(pid_t pid) {
             // Otherwise add the background process to an array of background PIDs
             // Status of background is tracked in the main loop
             else
-            {
+            {                
                 printf("background pid is: %d\n", this_pid);
                 background_processes[process_count] = this_pid;
                 process_count += 1;
@@ -359,7 +373,7 @@ Returns: none
 Postconditions: line references input string
 ============================================================ */
 void get_input(pid_t pid, char *line) {
-    // Parse PID to string from Ed Discussion post
+    // Parse PID to string from Professor's Ed Discussion post
     char *pidstr;
     {
         int n = snprintf(NULL, 0, "%d", pid);
