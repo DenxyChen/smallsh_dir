@@ -3,11 +3,18 @@
 //  Date: 05/09/2022
 //  Description: An implementation of a shell program (command-line interface) in C.
 
+#define _POSIX_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h> // pid_t
-#include <unistd.h> // fork
+#include <sys/types.h> 
+#include <unistd.h>
+#include <errno.h>
+#include <sys/wait.h> 
+#include <signal.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #define MAX_LENGTH 2048
 #define MAX_ARG 512
@@ -26,8 +33,12 @@ struct args
 
 int run_command(pid_t pid);
 void get_input(pid_t pid, char *line);
-struct args* parse_args(char *line);
-void cd(char *path);
+
+// Unused due to issues with pointers to the struct
+// struct args* parse_args(char *line);
+// void cd(char *path);
+// void create_child(struct args* cmd);
+// void run_in_foreground(struct args* cmd);
 
 /* ============================================================
 main() runs a loop that continuously calls run_command() 
@@ -38,8 +49,17 @@ sets run_flag to false which breaks the loop and exits the program.
 int main() {
     int run_flag = 1;
     pid_t pid = getpid();
-    printf("pid is:    %d\n", pid);
-    fflush(stdout);
+
+    // struct sigaction SIGSTP_action = {0};
+
+    // SIGSTP.sa_handler = handle_SIGSTP;
+    // sigfillset(&SIGSTP_action.sa_mask);
+    // SIGSTP_action.sa_flags = 0;
+    // sigaction(SIGSTP, &SIGSTP_action, NULL);
+    // struct sigaction ignore_action;
+
+    // ignore_action.sa_handler = SIG_IGN;
+    // sigaction(SIGINT, &ignore_action, NULL);
 
     while (run_flag == 1) {
         printf(": ");
@@ -64,7 +84,49 @@ int run_command(pid_t pid) {
     char line[MAX_LENGTH] = {0};
     get_input(pid, line);
 
-    struct args *cmd = parse_args(line);
+    // char line_cpy[MAX_LENGTH];
+    // strcpy(line_cpy, line);
+
+    struct args *cmd = malloc(sizeof(struct args));
+    cmd->argc = 0;
+    memset(cmd->argv, 0, sizeof(cmd->argv));
+    cmd->input_file = NULL;
+    cmd->output_file = NULL;
+    cmd->background_flag = 0;
+    
+    int redir_flag = 0;
+
+    // Parse line into an array of strings delineated by whitespace
+    char *token = strtok(line, DELIM);
+    while (token != NULL) {
+        // redir_flag == 1 indicates next token is the input file
+        if ((strcmp(token, "<") == 0) && (redir_flag == 0) && (cmd->input_file == NULL)) {
+            redir_flag = 1;
+            cmd->argv[cmd->argc] = NULL;
+        }
+        // redir_flag == 2 indicates next token is the output file
+        else if (strcmp(token, ">") == 0 && (redir_flag == 0) && (cmd->output_file == NULL)) {
+            redir_flag = 2;
+            cmd->argv[cmd->argc] = NULL;
+        }
+        else {
+            if (redir_flag == 1) {
+                cmd->input_file = token;
+            }
+            else if (redir_flag == 2) {
+                cmd-> output_file = token;
+            }
+            redir_flag = 0;
+            cmd->argv[cmd->argc] = token;
+        }
+        cmd->argc += 1;
+        token = strtok(NULL, DELIM);
+    }
+
+    // Set background flag if the last arg is &
+    if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
+        cmd->background_flag = 1;
+    }
 
     // Ignore empty lines and lines that start with #
     if ((cmd->argc == 0) | (line[0] == '#')){
@@ -74,14 +136,14 @@ int run_command(pid_t pid) {
         return 1;
     }
 
-    printf("%d - ", cmd->argc);
-    fflush(stdout);
-    for (int i = 0; i < cmd->argc; i++) {
-        printf("%s ", cmd->argv[i]);
-        fflush(stdout);
-    }
-    printf("\n");
-    fflush(stdout);
+    // printf("%d - ", cmd->argc);
+    // fflush(stdout);
+    // for (int i = 0; i < cmd->argc; i++) {
+    //     printf("%s ", cmd->argv[i]);
+    //     fflush(stdout);
+    // }
+    // printf("\n");
+    // fflush(stdout);
 
     // exit command
     if (strcmp(cmd->argv[0], "exit") == 0) {
@@ -101,19 +163,19 @@ int run_command(pid_t pid) {
         // Changes wprking dir to the HOME environment variable if no arguments are provided
         if (cmd->argc == 1) {
             if (chdir(getenv("HOME")) == 0) {
-                char cwd[MAX_LENGTH];
-                getcwd(cwd, sizeof(cwd));
-                printf("cd: %s\n", cwd);
-                fflush(stdout);
+                // char cwd[MAX_LENGTH];
+                // getcwd(cwd, sizeof(cwd));
+                // printf("cd: %s\n", cwd);
+                // fflush(stdout);
             }
         }
         // Changes working dir to the relative path passed as an argument if one is provided
         else if (cmd->argc == 2) {
             if (chdir(cmd->argv[1]) == 0) {
-                char cwd[MAX_LENGTH];
-                getcwd(cwd, sizeof(cwd));
-                printf("cd: %s\n", cwd);
-                fflush(stdout);
+                // char cwd[MAX_LENGTH];
+                // getcwd(cwd, sizeof(cwd));
+                // printf("cd: %s\n", cwd);
+                // fflush(stdout);
             }
             else {
                 fprintf(stderr, "cd: %s: no such directory\n", cmd->argv[1]);
@@ -126,8 +188,88 @@ int run_command(pid_t pid) {
         }
     }
 
+    // status command
     else if (strcmp(cmd->argv[0], "status") == 0) {
         printf("exit value %d\n", exit_status);
+        fflush(stdout);
+    }
+
+    // Fork to run exec() family commands
+    else {
+        pid_t this_pid = fork();
+        int status;
+
+        // Print error message if forking fails
+        if (this_pid == -1) {
+            fprintf(stderr, "fork: %s", strerror(errno));
+            fflush(stderr);
+        }
+
+        // Run if the calling process is a child
+        else if (this_pid == 0) {
+            int in_fd, out_fd;
+            int dev_null_open_flag = 0; 
+            // struct sigaction SIGSTP_action = {0};
+            // struct sigaction default_action = {0};
+
+            // SIGSTP.sa_handler = handle_SIGSTP;
+            // sigfillset(&SIGSTP_action.sa_mask);
+            // SIGSTP_action.sa_flags = 0;
+            // sigaction(SIGSTP, &SIGSTP_action, NULL);
+
+            // default_action.sa_handler = SIG_DFL;
+
+            // sigaction(SIGINT, &default_action, NULL);
+
+            // Handle input redirection if specified
+            if(cmd->input_file != NULL) {
+                in_fd = open(cmd->input_file, O_RDONLY);
+                if (in_fd == -1) {
+                    fprintf(stderr, "input: cannot open %s for input\n", cmd->input_file);
+                    fflush(stderr);
+                    exit_status = 1;
+                    free(cmd);
+                    return 1;
+                }
+                dup2(in_fd, STDIN_FILENO);
+            }
+            // Handle input redirection if background and unspecified
+            else if (cmd->background_flag == 1) {
+                in_fd = open("/dev/null", O_RDWR);
+                dev_null_open_flag = 1;
+                dup2(in_fd, STDIN_FILENO);
+            }
+
+            // Handle output redirection if specified
+            if(cmd->output_file != NULL) {
+                out_fd = open(cmd->output_file, O_WRONLY | O_CREAT|O_TRUNC, 00644);
+                if (out_fd == -1) {
+                    fprintf(stderr, "output: cannot open %s for output\n", cmd->output_file);
+                    fflush(stderr);
+                    exit_status = 1;
+                    free(cmd);
+                    return 1;
+                }
+                dup2(out_fd, STDOUT_FILENO);
+            }
+            // Handle input redirection if background and unspecified
+            else if (cmd->background_flag == 1 && (dev_null_open_flag != 1)) {
+                out_fd = open("/dev/null", O_RDWR);
+                dev_null_open_flag = 1;
+                dup2(in_fd, STDOUT_FILENO);
+            }
+
+            execvp(cmd->argv[0], cmd->argv);
+
+            fprintf(stderr, "%s: %s\n", cmd->argv[0], strerror(errno));
+            fflush(stderr);
+            exit_status = 1;
+        }
+
+        // Run if the calling process is the parent
+        else {
+            waitpid(this_pid, &status, 0);
+        }
     }
 
     free(cmd);
@@ -194,46 +336,74 @@ the struct.
 Recieves: line -> char*
 Returns: struct args*
 ============================================================ */
-struct args* parse_args(char *line) {
-    char line_cpy[MAX_LENGTH];
-    strcpy(line_cpy, line);
+// struct args* parse_args(char *line) {
+//     // char line_cpy[MAX_LENGTH];
+//     // strcpy(line_cpy, line);
 
-    struct args *cmd = malloc(sizeof(struct args));
-    cmd->argc = 0;
-    cmd->background_flag = 0;
-    int redir_flag = 0;
+//     // struct args *cmd = malloc(sizeof(struct args));
+//     // cmd->argc = 0;
+//     // cmd->background_flag = 0;
+//     // int redir_flag = 0;
 
-    // Parse line into an array of strings delineated by whitespace
-    char *token = strtok(line_cpy, DELIM);
-    while (token != NULL) {
-        // redir_flag == 1 indicates next token is the input file
-        if ((strcmp(token, "<") == 0) && (redir_flag == 0) && (cmd->input_file == NULL)) {
-            redir_flag = 1;
-        }
-        // redir_flag == 2 indicates next token is the output file
-        else if (strcmp(token, ">") == 0 && (redir_flag == 0) && (cmd->output_file == NULL)) {
-            redir_flag = 2;
-        }
-        else {
-            if (redir_flag == 1) {
-                cmd->input_file = token;
-            }
-            else if (redir_flag == 2) {
-                cmd-> output_file = token;
-            }
-            redir_flag = 0;
-        }
+//     // // Parse line into an array of strings delineated by whitespace
+//     // char *token = strtok(line_cpy, DELIM);
+//     // while (token != NULL) {
+//     //     // redir_flag == 1 indicates next token is the input file
+//     //     if ((strcmp(token, "<") == 0) && (redir_flag == 0) && (cmd->input_file == NULL)) {
+//     //         redir_flag = 1;
+//     //     }
+//     //     // redir_flag == 2 indicates next token is the output file
+//     //     else if (strcmp(token, ">") == 0 && (redir_flag == 0) && (cmd->output_file == NULL)) {
+//     //         redir_flag = 2;
+//     //     }
+//     //     else {
+//     //         if (redir_flag == 1) {
+//     //             cmd->input_file = token;
+//     //         }
+//     //         else if (redir_flag == 2) {
+//     //             cmd-> output_file = token;
+//     //         }
+//     //         redir_flag = 0;
+//     //     }
         
-        cmd->argv[cmd->argc] = token;
-        cmd->argc += 1;
-        token = strtok(NULL, DELIM);
-    }
+//     //     cmd->argv[cmd->argc] = token;
+//     //     cmd->argc += 1;
+//     //     token = strtok(NULL, DELIM);
+//     // }
 
-    // Set background flag if the last arg is &
-    if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
-        cmd->background_flag = 1;
-    }
+//     // // Set background flag if the last arg is &
+//     // if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
+//     //     cmd->background_flag = 1;
+//     // }
 
-    return cmd;
-}
+//     return cmd;
+// }
+
+// void create_child(struct args* cmd) {
+    // pid_t this_pid = fork();
+    
+    // // Print error message if forking fails
+    // if (this_pid == -1) {
+    //     fprintf(stderr, "fork: %s", strerror(errno));
+    //     fflush(stderr);
+    // }
+
+    // // Run if the calling process is a child
+    // else if (this_pid == 0) {
+    //     // printf("I am a child running the command: %s\n", cmd->argv[0]);
+    //     fflush(stdout);
+
+    //     for (int i = 0; i < cmd->argc; i++) {
+    //         printf("%s ", cmd->argv[i]);
+    //     }
+    //     // execvp(cmd->argv[0], cmd->argv);
+    // }
+
+    // // Run if the calling process is the parent
+    // else {
+    //     // printf("I am a parent running the command: %s\n", cmd->argv[0]);
+    //     fflush(stdout);
+    // }
+// }
+
 
