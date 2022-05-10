@@ -187,7 +187,9 @@ int run_command(pid_t pid) {
 
             // Kill all background child processes
             for (int i = 0; i < process_count; i++) {
-                kill((background_processes[i]), SIGTERM);
+                if (background_processes[i] != -1) {
+                    kill((background_processes[i]), SIGTERM);
+                }
             }
 
             return 0;
