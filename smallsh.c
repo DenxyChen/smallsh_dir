@@ -34,6 +34,9 @@ struct args
 int run_command(pid_t pid);
 void get_input(pid_t pid, char *line);
 
+pid_t background_processes[256];
+int process_count = 0;
+
 // Unused due to issues with pointers to the struct
 // struct args* parse_args(char *line);
 // void cd(char *path);
@@ -64,6 +67,27 @@ int main() {
     printf("%d\n", pid);
 
     while (run_flag == 1) {
+        // Check for terminated background processes
+
+        for(int i = 0; i < process_count; i++) {
+            if(background_processes[i] != -1) {
+                int result, status;
+                result = waitpid(background_processes[i], &status, WNOHANG);
+                if (result == 0) {
+                    if (WIFSIGNALED(status)) {
+                        printf("background pid %d is done: terminated by signal %d\n", background_processes[i], WTERMSIG(status));
+                        fflush(stdout);
+                        background_processes[i] = -1;
+                    }
+                    if (WIFEXITED(status)) {
+                        printf("background pid %d is done: exit value %d\n", background_processes[i], WEXITSTATUS(status));
+                        fflush(stdout);
+                        background_processes[i] = -1;
+                    }
+                }
+            }
+        }
+
         printf(": ");
         fflush(stdout);
         run_flag = run_command(pid);
@@ -135,7 +159,7 @@ int run_command(pid_t pid) {
     // Set background flag and null the last arg if &
     if (strcmp(cmd->argv[cmd->argc - 1], "&") == 0){
         cmd->background_flag = 1;
-        cmd->argv[cmd->argc - 1] = "\0";
+        cmd->argv[cmd->argc - 1] = NULL;
     }
 
     // Ignore empty lines and lines that start with #
@@ -160,6 +184,12 @@ int run_command(pid_t pid) {
         // Exits main loop if no arguments are provided
         if (cmd->argc == 1) {
             free(cmd);
+
+            // Kill all background child processes
+            for (int i = 0; i < process_count; i++) {
+                kill((background_processes[i]), SIGTERM);
+            }
+
             return 0;
         }
         else {
@@ -207,7 +237,6 @@ int run_command(pid_t pid) {
     // Fork to run exec() family commands
     else {
         pid_t this_pid = fork();
-        int status;
 
         // Print error message if forking fails
         if (this_pid == -1) {
@@ -278,11 +307,33 @@ int run_command(pid_t pid) {
             fprintf(stderr, "%s: %s\n", cmd->argv[0], strerror(errno));
             fflush(stderr);
             exit_status = 1;
+            free(cmd);
+            exit(1);
         }
 
         // Run if the calling process is the parent
         else {
-            waitpid(this_pid, &status, 0);
+            // Run foreground process to completion before returning control
+            if (cmd->background_flag == 0) {
+                int status;
+                waitpid(this_pid, &status, 0);
+                if (WIFSIGNALED(status)) {
+                    exit_status = WTERMSIG(status);
+                    printf("foreground: terminated by signal %d", exit_status);
+                    fflush(stdout);
+                }
+                else if (WIFEXITED(status)) {
+                    exit_status = WEXITSTATUS(status);
+                }
+            }
+            // Otherwise add the background process to an array of background PIDs
+            // Status of background is tracked in the main loop
+            else
+            {
+                printf("background pid is: %d\n", this_pid);
+                background_processes[process_count] = this_pid;
+                process_count += 1;
+            }
         }
     }
 
